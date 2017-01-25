@@ -202,50 +202,54 @@ void AlsaPlayer::worker()
 
 	while (active_)
 	{
-		if (handle_ == NULL)
-		{
-			try
+		if(muted_){
+			uninitAlsa();
+		}else{
+			if (handle_ == NULL)
 			{
-				initAlsa();
-			}
-			catch (const std::exception& e)
-			{
-				logE << "Exception in initAlsa: " << e.what() << endl;
-				chronos::sleep(100);
-			}
-		}
-
-//		snd_pcm_avail_delay(handle_, &framesAvail, &framesDelay);
-		snd_pcm_delay(handle_, &framesDelay);
-		chronos::usec delay((chronos::usec::rep) (1000 * (double) framesDelay / stream_->getFormat().msRate()));
-//		logO << "delay: " << framesDelay << ", delay[ms]: " << delay.count() / 1000 << "\n";
-
-		if (stream_->getPlayerChunk(buff_, delay, frames_))
-		{
-			lastChunkTick = chronos::getTickCount();
-			adjustVolume(buff_, frames_);
-			if ((pcm = snd_pcm_writei(handle_, buff_, frames_)) == -EPIPE)
-			{
-				logE << "XRUN\n";
-				snd_pcm_prepare(handle_);
-			}
-			else if (pcm < 0)
-			{
-				logE << "ERROR. Can't write to PCM device: " << snd_strerror(pcm) << "\n";
-				uninitAlsa();
-			}
-		}
-		else
-		{
-			logO << "Failed to get chunk\n";
-			while (active_ && !stream_->waitForChunk(100))
-			{
-				logD << "Waiting for chunk\n";
-				if ((handle_ != NULL) && (chronos::getTickCount() - lastChunkTick > 5000))
+				try
 				{
-					logO << "No chunk received for 5000ms. Closing ALSA.\n";
+					initAlsa();
+				}
+				catch (const std::exception& e)
+				{
+					logE << "Exception in initAlsa: " << e.what() << endl;
+					chronos::sleep(100);
+				}
+			}
+
+	//		snd_pcm_avail_delay(handle_, &framesAvail, &framesDelay);
+			snd_pcm_delay(handle_, &framesDelay);
+			chronos::usec delay((chronos::usec::rep) (1000 * (double) framesDelay / stream_->getFormat().msRate()));
+	//		logO << "delay: " << framesDelay << ", delay[ms]: " << delay.count() / 1000 << "\n";
+
+			if (stream_->getPlayerChunk(buff_, delay, frames_))
+			{
+				lastChunkTick = chronos::getTickCount();
+				adjustVolume(buff_, frames_);
+				if ((pcm = snd_pcm_writei(handle_, buff_, frames_)) == -EPIPE)
+				{
+					logE << "XRUN\n";
+					snd_pcm_prepare(handle_);
+				}
+				else if (pcm < 0)
+				{
+					logE << "ERROR. Can't write to PCM device: " << snd_strerror(pcm) << "\n";
 					uninitAlsa();
-					stream_->clearChunks();
+				}
+			}
+			else
+			{
+				logO << "Failed to get chunk\n";
+				while (active_ && !stream_->waitForChunk(100))
+				{
+					logD << "Waiting for chunk\n";
+					if ((handle_ != NULL) && (chronos::getTickCount() - lastChunkTick > 5000))
+					{
+						logO << "No chunk received for 5000ms. Closing ALSA.\n";
+						uninitAlsa();
+						stream_->clearChunks();
+					}
 				}
 			}
 		}
